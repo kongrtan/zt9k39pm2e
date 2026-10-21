@@ -14,6 +14,7 @@
 | [04 Dify 플랫폼 구조](04_dify_platform_structure.md) | 구성요소, 저장 위치, 등록·호출 흐름, 등록 API 표준 여부, 사용자 제공 형태, MCP 전송 방식 |
 | [05 Dify DB 스키마](05_dify_db_schema.md) | 등록 관련 테이블 (Dify 1.17.1 소스 기준), ERD, 암호화와 API Key 저장 방식 |
 | [초기 명세 (참고)](claude_code_prompt_specification.md) | 출발점이 된 초기 명세 |
+| [참조](reference.md) | 작업 환경 설정 (VS Code에서 Mermaid 미리보기 설치 등) |
 
 ## 핵심 설계 원칙
 
