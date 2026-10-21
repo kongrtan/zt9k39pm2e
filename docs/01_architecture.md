@@ -124,15 +124,17 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     autonumber
-    participant R as 규칙 엔진
-    participant O as 오케스트레이터
-    participant D as Dify Workflow
-    participant API as 자체 API (Tool)
-    participant N as 메일 발송 시스템 (기존)
-    participant M as 직접 구현한 메신저 (버튼 없음)
-    actor A as 승인자
-    participant P as 운영 포탈
-    participant X as 조치 API
+    box rgba(128,128,128,0.18)
+        participant R as 규칙 엔진
+        participant O as 오케스트레이터
+        participant D as Dify Workflow
+        participant API as 자체 API (Tool)
+        participant N as 메일 발송 시스템 (기존)
+        participant M as 직접 구현한 메신저 (버튼 없음)
+        actor A as 승인자
+        participant P as 운영 포탈
+        participant X as 조치 API
+    end
 
     R->>O: 이벤트 (rule_id, host, snapshot)
     O->>O: 중복 제거 / 묶기

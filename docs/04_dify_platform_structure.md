@@ -124,12 +124,14 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-    actor U as 에이전트 담당자
-    participant W as web (콘솔)
-    participant A as api (/console/api)
-    participant P as PostgreSQL
-    participant Q as Redis → worker
-    participant V as Vector DB
+    box rgba(128,128,128,0.18)
+        actor U as 에이전트 담당자
+        participant W as web (콘솔)
+        participant A as api (/console/api)
+        participant P as PostgreSQL
+        participant Q as Redis → worker
+        participant V as Vector DB
+    end
 
     U->>W: 모델 · Tool · MCP 등록
     W->>A: 설정 저장
@@ -153,13 +155,15 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant O as 오케스트레이터
-    participant A as api (/v1)
-    participant P as PostgreSQL
-    participant T as ssrf_proxy → 자체 API
-    participant S as sandbox
-    participant V as Vector DB
-    participant L as plugin_daemon → LLM
+    box rgba(128,128,128,0.18)
+        participant O as 오케스트레이터
+        participant A as api (/v1)
+        participant P as PostgreSQL
+        participant T as ssrf_proxy → 자체 API
+        participant S as sandbox
+        participant V as Vector DB
+        participant L as plugin_daemon → LLM
+    end
 
     O->>A: POST /v1/workflows/run (Bearer app-xxx)
     A->>P: API Key 확인 → 게시된 워크플로 로드
