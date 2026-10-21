@@ -19,7 +19,7 @@ flowchart LR
     D --> E["👤 사람이 시스템 접속<br/>원인 파악"]
     E --> F["👤 사람이 조치"]
 
-    classDef human fill:#fde2e2,stroke:#c0392b;
+    classDef human fill:#fde2e2,stroke:#c0392b,color:#1a1a1a;
     class E,F human;
 ```
 
@@ -108,10 +108,10 @@ flowchart TB
     MAIL --> ADMIN
     PORTAL -. "Dify Service API<br/>(실행 로그 · 대화형 질의)" .-> DIFY
 
-    classDef dify fill:#e3f2fd,stroke:#1565c0;
-    classDef human fill:#fde2e2,stroke:#c0392b;
-    classDef legacy fill:#f5f5f5,stroke:#757575;
-    classDef new fill:#e8f5e9,stroke:#2e7d32;
+    classDef dify fill:#e3f2fd,stroke:#1565c0,color:#1a1a1a;
+    classDef human fill:#fde2e2,stroke:#c0392b,color:#1a1a1a;
+    classDef legacy fill:#f5f5f5,stroke:#757575,color:#1a1a1a;
+    classDef new fill:#e8f5e9,stroke:#2e7d32,color:#1a1a1a;
     class S,T,CODE,KB,LLM,OUT dify;
     class ADMIN human;
     class COL,RULE,BUS,MAIL,LOGAPI,METAPI legacy;

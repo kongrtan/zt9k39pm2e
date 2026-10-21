@@ -72,8 +72,8 @@ flowchart TB
     PLUGIN --> MCPS
     API -- "HTTP Request 노드 · Custom Tool" --> SSRF --> TOOLAPI
 
-    classDef store fill:#fff8e1,stroke:#f9a825;
-    classDef out fill:#f5f5f5,stroke:#757575;
+    classDef store fill:#fff8e1,stroke:#f9a825,color:#1a1a1a;
+    classDef out fill:#f5f5f5,stroke:#757575,color:#1a1a1a;
     class PG,REDIS,VDB,FILES store;
     class LLMEP,EMB,TOOLAPI,MCPS out;
 ```
