@@ -12,12 +12,16 @@
 
 ```mermaid
 flowchart LR
-    A["상시 모니터링"] --> B{"임계치(정량)<br/>1분 이상 지속?"}
-    B -- 아니오 --> A
-    B -- 예 --> C["수신자 목록 조회<br/>(DB/파일)"]
-    C --> D["메일 / 대시보드 /<br/>이벤트 전파"]
-    D --> E["👤 사람이 시스템 접속<br/>원인 파악"]
-    E --> F["👤 사람이 조치"]
+    subgraph BG[" "]
+        direction LR
+        A["상시 모니터링"] --> B{"임계치(정량)<br/>1분 이상 지속?"}
+        B -- 아니오 --> A
+        B -- 예 --> C["수신자 목록 조회<br/>(DB/파일)"]
+        C --> D["메일 / 대시보드 /<br/>이벤트 전파"]
+        D --> E["👤 사람이 시스템 접속<br/>원인 파악"]
+        E --> F["👤 사람이 조치"]
+    end
+    style BG fill:#8080802e,stroke:#8a8a8a
 
     classDef human fill:#fde2e2,stroke:#c0392b,color:#1a1a1a;
     class E,F human;
@@ -55,58 +59,62 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    subgraph LEGACY["기존 영역 (유지 · 재사용)"]
-        direction LR
-        COL["수집기 / APM"] --> RULE["규칙 엔진<br/>임계치 · 지속시간 · 변화율"]
-        RULE --> BUS["이벤트 버스"]
-        MAIL["메일 발송 시스템 (구축됨)<br/>수신자 목록 · 발송"]
-        RULE -. "대체 경로 (Dify 장애 시)" .-> MAIL
-    end
-
-    subgraph ORCH["오케스트레이터 (Backend)"]
+    subgraph BG[" "]
         direction TB
-        DEDUP["이벤트 중복 제거 / 묶기<br/>(연쇄 알림 억제)"]
-        VALID["응답 JSON 스키마 검증"]
-        POLICY["조치 정책 테이블<br/>(승인 필요 여부 최종 결정)"]
-        GW["승인 게이트웨이 (HITL)<br/>+ 감사 로그"]
+        subgraph LEGACY["기존 영역 (유지 · 재사용)"]
+            direction LR
+            COL["수집기 / APM"] --> RULE["규칙 엔진<br/>임계치 · 지속시간 · 변화율"]
+            RULE --> BUS["이벤트 버스"]
+            MAIL["메일 발송 시스템 (구축됨)<br/>수신자 목록 · 발송"]
+            RULE -. "대체 경로 (Dify 장애 시)" .-> MAIL
+        end
+
+        subgraph ORCH["오케스트레이터 (Backend)"]
+            direction TB
+            DEDUP["이벤트 중복 제거 / 묶기<br/>(연쇄 알림 억제)"]
+            VALID["응답 JSON 스키마 검증"]
+            POLICY["조치 정책 테이블<br/>(승인 필요 여부 최종 결정)"]
+            GW["승인 게이트웨이 (HITL)<br/>+ 감사 로그"]
+        end
+
+        subgraph DIFY["Dify Self-hosted · Workflow (본인 담당)"]
+            direction TB
+            S["① Start<br/>이벤트 payload"] --> T["② Custom Tool<br/>로그 / 메트릭 시계열 / 배포 이력"]
+            T --> CODE["③ Code (Python)<br/>변화율 · 추세 계산"]
+            CODE --> KB["④ Knowledge Retrieval<br/>과거 장애 · 런북 (RAG)"]
+            KB --> LLM["⑤ LLM<br/>원인 추정 · 심각도 · 조치 ID 선택"]
+            LLM --> OUT["⑥ End<br/>Structured Output (JSON)"]
+        end
+
+        subgraph EXT["자체 API (Tool 대상)"]
+            LOGAPI["로그 조회 API (구축됨)"]
+            METAPI["메트릭 조회 API (구축됨)"]
+            DEPAPI["배포 이력 API (확인 필요)"]
+        end
+
+        PORTAL["운영 포탈 (신규)<br/>승인 페이지 · 분석 상세 · 이력"]
+        MSG["직접 구현한 메신저<br/>(버튼 · 콜백 없음)"]
+
+        BUS -- "이벤트 발생 시에만" --> DEDUP
+        DEDUP -- "POST /v1/workflows/run" --> S
+        T <--> LOGAPI & METAPI & DEPAPI
+        OUT -- "결과 JSON" --> VALID
+        VALID --> POLICY
+
+        POLICY -- "분석 요약 + 포탈 링크" --> MAIL
+        POLICY -- "조치 제안" --> GW
+        GW -- "승인 토큰 발급<br/>(UUID + 만료시각, DB 저장)" --> TOKDB[("승인 요청 DB")]
+        GW -- "토큰 링크 메시지 발송" --> MSG
+        MSG --> ADMIN["👤 승인자"]
+        ADMIN -- "링크 열기 (SSO 로그인)" --> PORTAL
+        PORTAL -- "토큰 검증 · 승인 / 거절 (POST)" --> GW
+        GW <--> TOKDB
+        GW -- "승인 확정" --> ACT["조치 API<br/>화이트리스트 조치 ID만 실행"]
+        GW -- "결과 메시지 발송" --> MSG
+        MAIL --> ADMIN
+        PORTAL -. "Dify Service API<br/>(실행 로그 · 대화형 질의)" .-> DIFY
     end
-
-    subgraph DIFY["Dify Self-hosted · Workflow (본인 담당)"]
-        direction TB
-        S["① Start<br/>이벤트 payload"] --> T["② Custom Tool<br/>로그 / 메트릭 시계열 / 배포 이력"]
-        T --> CODE["③ Code (Python)<br/>변화율 · 추세 계산"]
-        CODE --> KB["④ Knowledge Retrieval<br/>과거 장애 · 런북 (RAG)"]
-        KB --> LLM["⑤ LLM<br/>원인 추정 · 심각도 · 조치 ID 선택"]
-        LLM --> OUT["⑥ End<br/>Structured Output (JSON)"]
-    end
-
-    subgraph EXT["자체 API (Tool 대상)"]
-        LOGAPI["로그 조회 API (구축됨)"]
-        METAPI["메트릭 조회 API (구축됨)"]
-        DEPAPI["배포 이력 API (확인 필요)"]
-    end
-
-    PORTAL["운영 포탈 (신규)<br/>승인 페이지 · 분석 상세 · 이력"]
-    MSG["직접 구현한 메신저<br/>(버튼 · 콜백 없음)"]
-
-    BUS -- "이벤트 발생 시에만" --> DEDUP
-    DEDUP -- "POST /v1/workflows/run" --> S
-    T <--> LOGAPI & METAPI & DEPAPI
-    OUT -- "결과 JSON" --> VALID
-    VALID --> POLICY
-
-    POLICY -- "분석 요약 + 포탈 링크" --> MAIL
-    POLICY -- "조치 제안" --> GW
-    GW -- "승인 토큰 발급<br/>(UUID + 만료시각, DB 저장)" --> TOKDB[("승인 요청 DB")]
-    GW -- "토큰 링크 메시지 발송" --> MSG
-    MSG --> ADMIN["👤 승인자"]
-    ADMIN -- "링크 열기 (SSO 로그인)" --> PORTAL
-    PORTAL -- "토큰 검증 · 승인 / 거절 (POST)" --> GW
-    GW <--> TOKDB
-    GW -- "승인 확정" --> ACT["조치 API<br/>화이트리스트 조치 ID만 실행"]
-    GW -- "결과 메시지 발송" --> MSG
-    MAIL --> ADMIN
-    PORTAL -. "Dify Service API<br/>(실행 로그 · 대화형 질의)" .-> DIFY
+    style BG fill:#8080802e,stroke:#8a8a8a
 
     classDef dify fill:#e3f2fd,stroke:#1565c0,color:#1a1a1a;
     classDef human fill:#fde2e2,stroke:#c0392b,color:#1a1a1a;
@@ -210,13 +218,17 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    subgraph ROLE["역할 분리 (방안 C)"]
-        direction TB
-        DEV["👤 에이전트 담당 (본인)"] -- "앱 · Tool · Knowledge 등록<br/>프롬프트 수정 · DSL export" --> CONSOLE["Dify 콘솔"]
-        OPS["👤 운영자 / 승인자"] -- "분석 결과 확인 · 승인 · 이력 조회" --> PORTAL["운영 포탈"]
-        PORTAL -- "Service API<br/>(앱 API Key)" --> ENGINE["Dify 엔진"]
-        CONSOLE --> ENGINE
+    subgraph BG[" "]
+        direction LR
+        subgraph ROLE["역할 분리 (방안 C)"]
+            direction TB
+            DEV["👤 에이전트 담당 (본인)"] -- "앱 · Tool · Knowledge 등록<br/>프롬프트 수정 · DSL export" --> CONSOLE["Dify 콘솔"]
+            OPS["👤 운영자 / 승인자"] -- "분석 결과 확인 · 승인 · 이력 조회" --> PORTAL["운영 포탈"]
+            PORTAL -- "Service API<br/>(앱 API Key)" --> ENGINE["Dify 엔진"]
+            CONSOLE --> ENGINE
+        end
     end
+    style BG fill:#8080802e,stroke:#8a8a8a
 ```
 
 **권장: 방안 C (A로 시작해서 포탈을 붙임)**

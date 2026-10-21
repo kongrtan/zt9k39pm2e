@@ -24,53 +24,57 @@ Dify는 크게 **등록하는 길**과 **실행하는 길**이 나뉜다.
 
 ```mermaid
 flowchart TB
-    subgraph CLIENT["사용자 / 외부 시스템"]
-        DEV["👤 에이전트 담당자<br/>(브라우저)"]
-        CLI["difyctl<br/>(CI · 자동화)"]
-        ORCH["오케스트레이터 / 포탈"]
+    subgraph BG[" "]
+        direction TB
+        subgraph CLIENT["사용자 / 외부 시스템"]
+            DEV["👤 에이전트 담당자<br/>(브라우저)"]
+            CLI["difyctl<br/>(CI · 자동화)"]
+            ORCH["오케스트레이터 / 포탈"]
+        end
+
+        NGINX["nginx<br/>리버스 프록시"]
+
+        subgraph DIFY["Dify (Docker Compose)"]
+            WEB["web<br/>Next.js 콘솔 화면"]
+            API["api (Flask)<br/>/console/api · /v1"]
+            WORKER["worker (Celery)<br/>문서 인덱싱 · 비동기 작업"]
+            BEAT["worker_beat<br/>주기 작업"]
+            PLUGIN["plugin_daemon<br/>모델 · Tool · MCP 플러그인 실행"]
+            SANDBOX["sandbox<br/>Code 노드 실행"]
+            SSRF["ssrf_proxy (Squid)<br/>외부 HTTP 호출 출구"]
+        end
+
+        subgraph STORE["저장소"]
+            PG[("PostgreSQL<br/>앱 정의 · 설정 · 키 · 실행 로그")]
+            REDIS[("Redis<br/>캐시 · 작업 큐 · 세션")]
+            VDB[("Vector DB<br/>Weaviate 기본<br/>pgvector · Qdrant · Milvus 등")]
+            FILES[("파일 저장소<br/>로컬 / S3 / MinIO")]
+        end
+
+        subgraph OUT["Dify 밖"]
+            LLMEP["LLM 엔드포인트"]
+            EMB["Embedding / Rerank 엔드포인트"]
+            TOOLAPI["자체 API<br/>(로그 · 메트릭)"]
+            MCPS["MCP 서버 (HTTP)"]
+        end
+
+        DEV --> NGINX
+        CLI --> NGINX
+        ORCH -- "/v1 (App API Key)" --> NGINX
+        NGINX --> WEB
+        NGINX --> API
+        WEB -- "/console/api" --> API
+
+        API --> PG & REDIS & VDB & FILES
+        API -- "작업 등록" --> REDIS --> WORKER
+        WORKER --> PG & VDB & FILES
+        API --> PLUGIN
+        API --> SANDBOX
+        PLUGIN --> LLMEP & EMB
+        PLUGIN --> MCPS
+        API -- "HTTP Request 노드 · Custom Tool" --> SSRF --> TOOLAPI
     end
-
-    NGINX["nginx<br/>리버스 프록시"]
-
-    subgraph DIFY["Dify (Docker Compose)"]
-        WEB["web<br/>Next.js 콘솔 화면"]
-        API["api (Flask)<br/>/console/api · /v1"]
-        WORKER["worker (Celery)<br/>문서 인덱싱 · 비동기 작업"]
-        BEAT["worker_beat<br/>주기 작업"]
-        PLUGIN["plugin_daemon<br/>모델 · Tool · MCP 플러그인 실행"]
-        SANDBOX["sandbox<br/>Code 노드 실행"]
-        SSRF["ssrf_proxy (Squid)<br/>외부 HTTP 호출 출구"]
-    end
-
-    subgraph STORE["저장소"]
-        PG[("PostgreSQL<br/>앱 정의 · 설정 · 키 · 실행 로그")]
-        REDIS[("Redis<br/>캐시 · 작업 큐 · 세션")]
-        VDB[("Vector DB<br/>Weaviate 기본<br/>pgvector · Qdrant · Milvus 등")]
-        FILES[("파일 저장소<br/>로컬 / S3 / MinIO")]
-    end
-
-    subgraph OUT["Dify 밖"]
-        LLMEP["LLM 엔드포인트"]
-        EMB["Embedding / Rerank 엔드포인트"]
-        TOOLAPI["자체 API<br/>(로그 · 메트릭)"]
-        MCPS["MCP 서버 (HTTP)"]
-    end
-
-    DEV --> NGINX
-    CLI --> NGINX
-    ORCH -- "/v1 (App API Key)" --> NGINX
-    NGINX --> WEB
-    NGINX --> API
-    WEB -- "/console/api" --> API
-
-    API --> PG & REDIS & VDB & FILES
-    API -- "작업 등록" --> REDIS --> WORKER
-    WORKER --> PG & VDB & FILES
-    API --> PLUGIN
-    API --> SANDBOX
-    PLUGIN --> LLMEP & EMB
-    PLUGIN --> MCPS
-    API -- "HTTP Request 노드 · Custom Tool" --> SSRF --> TOOLAPI
+    style BG fill:#8080802e,stroke:#8a8a8a
 
     classDef store fill:#fff8e1,stroke:#f9a825,color:#1a1a1a;
     classDef out fill:#f5f5f5,stroke:#757575,color:#1a1a1a;

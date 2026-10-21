@@ -27,14 +27,18 @@
 
 ```mermaid
 flowchart LR
-    RULE["규칙 엔진<br/>(기존)"] -- 이벤트 --> ORCH["오케스트레이터"]
-    ORCH -- "/v1/workflows/run" --> DIFY["Dify Workflow<br/>Tool · RAG · LLM"]
-    DIFY -- "분석 결과 JSON" --> ORCH
-    ORCH -- 알림 --> MAIL["메일 (기존)"]
-    ORCH -- "토큰 링크" --> MSG["직접 구현한 메신저"]
-    MSG --> PORTAL["포탈 승인 페이지"]
-    PORTAL -- 승인 --> ORCH
-    ORCH -- "화이트리스트 조치" --> ACT["조치 API"]
+    subgraph BG[" "]
+        direction LR
+        RULE["규칙 엔진<br/>(기존)"] -- 이벤트 --> ORCH["오케스트레이터"]
+        ORCH -- "/v1/workflows/run" --> DIFY["Dify Workflow<br/>Tool · RAG · LLM"]
+        DIFY -- "분석 결과 JSON" --> ORCH
+        ORCH -- 알림 --> MAIL["메일 (기존)"]
+        ORCH -- "토큰 링크" --> MSG["직접 구현한 메신저"]
+        MSG --> PORTAL["포탈 승인 페이지"]
+        PORTAL -- 승인 --> ORCH
+        ORCH -- "화이트리스트 조치" --> ACT["조치 API"]
+    end
+    style BG fill:#8080802e,stroke:#8a8a8a
 ```
 
 > 문서 안의 호스트명(`*.internal`), 서비스명, 토큰 값은 모두 설명용 예시입니다.

@@ -12,22 +12,26 @@
 
 ```mermaid
 flowchart LR
-    subgraph WS["워크스페이스 공통 (1회)"]
-        direction TB
-        S1["① 모델 공급자<br/>플러그인 설치 + API Key"] --> S2["② Custom Tool<br/>OpenAPI 스키마 등록"]
-        S2 --> S3["③ Knowledge<br/>런북 · 장애 이력 업로드"]
+    subgraph BG[" "]
+        direction LR
+        subgraph WS["워크스페이스 공통 (1회)"]
+            direction TB
+            S1["① 모델 공급자<br/>플러그인 설치 + API Key"] --> S2["② Custom Tool<br/>OpenAPI 스키마 등록"]
+            S2 --> S3["③ Knowledge<br/>런북 · 장애 이력 업로드"]
+        end
+        subgraph APP["앱 단위 (에이전트마다)"]
+            direction TB
+            S4["④ 앱 생성<br/>Workflow"] --> S5["⑤ 노드 구성"]
+            S5 --> S6["⑥ 디버그 실행"]
+            S6 --> S7["⑦ 게시 + API Key 발급"]
+        end
+        subgraph OPS["운영"]
+            direction TB
+            S8["⑧ DSL export → Git"] --> S9["⑨ 로그 · 모니터링"]
+        end
+        WS --> APP --> OPS
     end
-    subgraph APP["앱 단위 (에이전트마다)"]
-        direction TB
-        S4["④ 앱 생성<br/>Workflow"] --> S5["⑤ 노드 구성"]
-        S5 --> S6["⑥ 디버그 실행"]
-        S6 --> S7["⑦ 게시 + API Key 발급"]
-    end
-    subgraph OPS["운영"]
-        direction TB
-        S8["⑧ DSL export → Git"] --> S9["⑨ 로그 · 모니터링"]
-    end
-    WS --> APP --> OPS
+    style BG fill:#8080802e,stroke:#8a8a8a
 ```
 
 ---
@@ -157,16 +161,20 @@ paths:
 
 ```mermaid
 flowchart LR
-    START["Start"] --> TOOL1["Tool<br/>getErrorLogs"]
-    START --> TOOL2["Tool<br/>getMetricSeries"]
-    TOOL1 --> CODE["Code<br/>추세 · 변화율 계산<br/>로그 요약 · 마스킹"]
-    TOOL2 --> CODE
-    CODE --> KR["Knowledge Retrieval<br/>런북 · 장애 이력"]
-    KR --> LLM["LLM<br/>Structured Output"]
-    LLM --> HI{"Human Input<br/>(선택, §5.7)"}
-    HI -- "승인" --> END["End"]
-    HI -- "거절 · 타임아웃" --> END2["End<br/>(조치 없음)"]
-    LLM -. "Human Input 미사용 시" .-> END
+    subgraph BG[" "]
+        direction LR
+        START["Start"] --> TOOL1["Tool<br/>getErrorLogs"]
+        START --> TOOL2["Tool<br/>getMetricSeries"]
+        TOOL1 --> CODE["Code<br/>추세 · 변화율 계산<br/>로그 요약 · 마스킹"]
+        TOOL2 --> CODE
+        CODE --> KR["Knowledge Retrieval<br/>런북 · 장애 이력"]
+        KR --> LLM["LLM<br/>Structured Output"]
+        LLM --> HI{"Human Input<br/>(선택, §5.7)"}
+        HI -- "승인" --> END["End"]
+        HI -- "거절 · 타임아웃" --> END2["End<br/>(조치 없음)"]
+        LLM -. "Human Input 미사용 시" .-> END
+    end
+    style BG fill:#8080802e,stroke:#8a8a8a
 ```
 
 ### 5.1 Start: 입력 변수
