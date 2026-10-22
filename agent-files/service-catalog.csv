@@ -1,0 +1,8 @@
+service,display_name,owner_team,tier,hosts,depends_on,specialist_agent,runbook
+order-api,주문 API,커머스개발팀,1,prd-app-01;prd-app-02;prd-app-03,order-db;cache-svc;payment-api,app-agent,RB-ORDER-01
+payment-api,결제 API,결제개발팀,1,prd-pay-01;prd-pay-02,payment-db;ext-pg-gateway,app-agent,RB-PAY-01
+order-db,주문 DB (PostgreSQL),DB운영팀,1,prd-db-01;prd-db-02,,db-agent,RB-DB-01
+payment-db,결제 DB (PostgreSQL),DB운영팀,1,prd-db-03;prd-db-04,,db-agent,RB-DB-01
+cache-svc,공통 캐시 (Redis),플랫폼팀,2,prd-cache-01;prd-cache-02,,middleware-agent,RB-CACHE-01
+batch-settle,정산 배치,정산개발팀,2,prd-batch-01,order-db;payment-db,app-agent,RB-BATCH-01
+ext-pg-gateway,외부 결제대행 연동 게이트웨이,네트워크팀,1,prd-gw-01,,network-agent,RB-NET-02

@@ -13,7 +13,12 @@
 | [03 Dify 에이전트 등록 절차](03_dify_agent_registration_guide.md) | 모델, Tool, Knowledge 등록 → Workflow 구성 → 게시와 API 연결 → DSL 버전 관리 |
 | [04 Dify 플랫폼 구조](04_dify_platform_structure.md) | 구성요소, 저장 위치, 등록·호출 흐름, 등록 API 표준 여부, 사용자 제공 형태, MCP 전송 방식 |
 | [05 Dify DB 스키마](05_dify_db_schema.md) | 등록 관련 테이블 (Dify 1.17.1 소스 기준), ERD, 암호화와 API Key 저장 방식 |
+| [06 Dify Agent 설정 항목](06_dify_agent_configuration.md) | Agent v2 화면의 모델, 프롬프트, 스킬, 파일, 도구, 고급 설정(환경 변수), 채팅으로 만들기(Build) 설명과 예제 |
 | [초기 명세 (참고)](claude_code_prompt_specification.md) | 출발점이 된 초기 명세 |
+| [샘플 스킬](../skills/) | Dify Agent에 Upload package로 올릴 수 있는 스킬 zip과 원본 (incident-triage, incident-handoff). 설명은 06 §3 |
+| [샘플 프롬프트](../prompts/) | 1차 Agent, DB 전문 Agent 프롬프트. 작성 가이드는 06 §2 |
+| [샘플 파일](../agent-files/) | Agent 파일 항목에 올릴 샘플 (서비스 목록, 알람 규칙, 구성 개요, 에스컬레이션, 용어집). 설명은 06 §4.2 |
+| [도구](../tools/) | 큰 OpenAPI 스펙에서 필요한 작업만 잘라 Dify용 스키마로 만드는 스크립트와 Grafana 설정 예. 설명은 06 §5.1 |
 | [참조](reference.md) | 작업 환경 설정 (VS Code에서 Mermaid 미리보기 설치 등) |
 
 ## 핵심 설계 원칙

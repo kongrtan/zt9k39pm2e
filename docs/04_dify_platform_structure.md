@@ -6,6 +6,55 @@
 
 ---
 
+## 0. Dify의 최종 산출물은 무엇인가
+
+Dify의 최종 산출물은 **게시된 앱**(Agent, Workflow, Chatflow 등)과 그 **접근 경로**(Web App, Service API, Workflow 노드, MCP Server)다. Agent는 앱의 한 종류다. 모델, 도구, 지식, 스킬, 파일은 앱을 만드는 **재료**인데, Agent 전용이 아니라 워크스페이스의 여러 앱이 함께 쓴다.
+
+```mermaid
+flowchart LR
+    subgraph BG[" "]
+        direction LR
+        subgraph RES["재료 (워크스페이스 공용)"]
+            direction TB
+            M["모델 공급자"]
+            T["도구<br/>플러그인 · Swagger · MCP"]
+            K["지식 (Knowledge)"]
+            S["스킬 라이브러리"]
+        end
+        subgraph APP["조립물 (앱)"]
+            direction TB
+            AG["Agent<br/>+ 프롬프트 · 파일 · 환경 변수"]
+            WF["Workflow / Chatflow"]
+        end
+        subgraph OUT["접근 경로 (최종 산출물)"]
+            direction TB
+            API["Service API"]
+            WEB["Web App"]
+            NODE["Workflow 노드"]
+            MCPS["MCP Server"]
+        end
+        RES --> APP
+        APP -- 게시 --> OUT
+        WF -. "Workflow를 도구로" .-> T
+        AG -. "Agent를 노드로" .-> WF
+        API --> PORTAL["우리 시스템<br/>포탈 · 오케스트레이터"]
+    end
+    style BG fill:#8080802e,stroke:#8a8a8a
+
+    classDef out fill:#dcfce7,stroke:#16a34a,color:#1a1a1a;
+    classDef ours fill:#fde2e2,stroke:#c0392b,color:#1a1a1a;
+    class API,WEB,NODE,MCPS out;
+    class PORTAL ours;
+```
+
+- 조립물이 다시 재료가 되기도 한다. Workflow는 도구로, Agent는 Workflow의 노드로 쓸 수 있다.
+- **이 프로젝트에서 Dify의 최종 산출물은 "포탈과 오케스트레이터가 호출하는 Agent의 Service API"다.** 운영자가 보는 최종 제품은 포탈 채팅 화면이고, Dify는 그 뒤의 엔진이다 ([01 §2.3 방안 C](01_architecture.md)).
+- 그래서 등록 담당이 관리할 것은 두 가지다.
+  - 앱: 프롬프트, 연결 구성, 게시 버전
+  - 재료: 도구 스키마와 키, 지식, 스킬. 여러 앱이 공유하므로 바꾸면 그 재료를 쓰는 앱이 모두 영향을 받는다
+
+---
+
 ## 1. 한 장 요약
 
 Dify는 크게 **등록하는 길**과 **실행하는 길**이 나뉜다.
@@ -272,10 +321,10 @@ Dify에서는:
 
 | 대상 | 제공 형태 | 시기 |
 |---|---|---|
-| 오케스트레이터 (이벤트 분석) | ③ Service API: Workflow 앱 | 1차 |
-| 승인자 | 메신저 토큰 링크 → 포탈 승인 페이지 (Dify UI가 아님) | 1차 |
-| 운영자 대화형 질의 ("왜 그렇게 판단했어?") | ③ Service API: Chatflow 앱, **포탈 안에 채팅 화면을 직접 구현** | 2차 |
-| 빠른 PoC 시연 | ① Web App 또는 ② Embed | PoC 단계만 |
+| 운영자 (알람 → 상황 파악 → 해결) | ③ Service API: Agent(v2) 또는 Chatflow, **포탈 안에 장애별 채팅 화면을 직접 구현** ([01 §2.4](01_architecture.md)) | 1단계 |
+| 승인자 | 포탈 채팅 화면의 승인 카드, 권한이 없으면 메신저 토큰 링크 → 포탈 승인 페이지 (Dify UI가 아님) | 1단계 |
+| 오케스트레이터 (초기 분석, 선택) | ③ Service API: Workflow 앱 또는 같은 Agent | 1단계 |
+| 빠른 PoC 시연 | ① Web App 또는 ② Embed. Self-hosted Web App은 **URL만 알면 로그인 없이 접속**되므로 조회 도구만 연결하고 내부망에서만 | PoC 단계만 |
 | 개발자 / 다른 AI 도구 | ④ MCP Server | 필요할 때 |
 
 ---
@@ -296,3 +345,4 @@ Dify에서는:
 | 2026-10-21 | §6 사용자 제공 형태 (Web App, Embed, API, MCP, Workflow as Tool) 추가 |
 | 2026-10-21 | §6.2-1 MCP 전송 방식 (stdio / legacy SSE / Streamable HTTP) 추가 |
 | 2026-10-21 | §6.2-1 MCP 표준 여부와 2026-07-28 스펙 변경(stateless) 추가 |
+| 2026-10-22 | §0 Dify의 최종 산출물(게시된 앱과 접근 경로)과 재료·조립물 관계 추가 |

@@ -70,15 +70,23 @@ Dify에 실제로 넣어야 하는 값들이다. 이 값들이 모두 준비되�
 | 로그 조회 | 호스트·서비스·시간 범위별 에러 로그 | **있음** | ? | ? |
 | 배포/변경 이력 조회 | 최근 배포, 설정 변경 | ? | ? | ? |
 | 서비스 토폴로지 조회 | 연관 서비스 파악 | ? | ? | ? |
+| Kubernetes 조회 | Pod 상태·재시작·로그·이벤트 (`kubectl get po` 수준) | k8s API 서버 | 작은 스펙 직접 작성 또는 조회 어댑터 ([06 §5.1](06_dify_agent_configuration.md)) | 읽기 전용 ServiceAccount 토큰 |
+| Grafana 조회 (선택) | 배포 주석, 알림 상태, 대시보드 링크 | Grafana (있으면) | 공식 OpenAPI에서 필요한 작업만 추린 작은 스펙 ([06 §5.1](06_dify_agent_configuration.md)) | 서비스 계정 토큰 (Viewer) |
 | 조치 실행 | 화이트리스트 조치 (승인 후에만) | ? | ? | ? |
 
 - [ ] 기존 로그·메트릭 API의 OpenAPI 3.0 스펙 확보. 없으면 작성 (Dify Custom Tool은 OpenAPI 스키마를 넣어서 등록함)
 - [ ] 기존 API 응답을 LLM이 읽기 좋은 형태로 줄이는 방법 결정: (1) 기존 API에 요약 파라미터 추가, (2) Tool 앞에 얇은 어댑터 API 추가, (3) Dify Code 노드에서 후처리
 - [ ] Dify 서버에서 기존 API로 가는 네트워크 경로와 방화벽 허용
 - [ ] **ssrf_proxy(Squid)가 사설 IP 대역 요청을 막는지 확인하고, 필요한 자체 API 대역만 허용** ([04 §2](04_dify_platform_structure.md))
-- [ ] 여러 에이전트·AI 도구에서 같이 쓸 API라면 MCP 서버로 감싸는 방안 검토 (Dify는 HTTP 방식 MCP만 지원)
+- [ ] (선택, MCP를 쓸 때만) 여러 에이전트·AI 도구에서 같이 쓸 API라면 MCP 서버로 감싸는 방안 검토 (Dify는 HTTP 방식 MCP만 지원). 1단계는 Swagger API(Custom Tool)만으로 충분하다
   - [ ] MCP 서버를 만든다면 Streamable HTTP + 공식 SDK 사용. 설치한 Dify가 지원하는 MCP 프로토콜 버전과 호환되는지 확인 (2026-07-28 스펙에서 stateless로 크게 바뀜, [04 §6.2-1](04_dify_platform_structure.md))
+  - [ ] stdio로만 되는 MCP 서버(예: Postgres)는 HTTP를 지원하는 서버로 바꾸거나 HTTP로 띄운다. (참고, 이번 범위 제외: LiteLLM MCP 게이트웨이로 HTTP 변환하는 방법도 있음. `LITELLM_ENABLE_MCP_STDIO=true`, Dify 전용 가상 키에 해당 서버만 허용, DB는 읽기 전용 계정 + Replica ([06 §5.1](06_dify_agent_configuration.md)))
 - [ ] Tool 전용 인증 키 발급 (읽기 전용 / 조치용 분리)
+  - Dify Custom Tool의 인증은 등록할 때 **미리 넣어 두는 고정 키**뿐이다: 없음 / 헤더(`Authorization`이나 직접 정한 헤더 이름, 접두어 Basic·Bearer·없음) / 쿼리 파라미터 (1.17.1 `core/tools/custom_tool/tool.py`)
+  - OAuth나 만료되는 토큰(JWT 등)의 자동 갱신은 없다. 만료가 긴 서비스 키를 발급하거나, 앞단 게이트웨이가 토큰을 붙이게 한다
+  - 키는 도구 공급자(스키마) 단위로 하나다. 모든 Agent 호출이 같은 서비스 계정으로 나가므로 "누가 조회했는지"는 `incident_id`와 포탈 기록으로 추적한다
+  - 키를 교체하면 Dify 도구 설정도 바꿔야 한다. 교체 주기와 담당자를 정한다
+  - **키 권한이 곧 Agent 사용자의 권한이 된다** ([01 §2.4.2-9](01_architecture.md)). 권한 그룹별로 Agent와 키를 나누고, 그룹별 허용 API 목록을 정리한다
 - [ ] 응답 크기 제한 (로그 최대 줄 수, 페이로드 크기): LLM 컨텍스트 한도 고려
 - [ ] **조치 실행 Tool은 Dify에 직접 등록하지 않는 방안 검토**: Dify는 조치 ID만 출력하고, 실제 실행은 오케스트레이터가 승인 후 수행
 
@@ -102,7 +110,7 @@ Dify에 실제로 넣어야 하는 값들이다. 이 값들이 모두 준비되�
 - [ ] 기존 메일 발송 시스템의 호출 방식 확인 (API / 메시지 큐 / DB insert)
 - [ ] 메일 본문에 분석 요약(status, root_cause_summary, evidence)과 포탈 링크를 넣을 수 있는지 확인. 템플릿 수정 범위
 - [ ] 기존 수신자 목록을 그대로 쓸지, 심각도별 수신자를 나눌지 결정
-- [ ] 운영 포탈이 쓸 Dify Service API 목록 확정 (workflow run, 실행 로그 조회, 2차: chat-messages)
+- [ ] 운영 포탈이 쓸 Dify Service API 목록 확정 (chat-messages, conversations, messages, workflow run, 실행 로그 조회)
 
 - [ ] Dify 앱 API Key 발급 (앱별 발급, 저장 위치: Vault 또는 환경변수)
 - [ ] 호출 방식 결정: blocking / streaming, 타임아웃, 재시도 정책
@@ -136,6 +144,36 @@ Dify에 실제로 넣어야 하는 값들이다. 이 값들이 모두 준비되�
 - [ ] 만료 시 에스컬레이션 대상과 재발급 규칙
 - [ ] 메신저 장애 시: 메일로 같은 링크 발송 (기존 메일 시스템)
 
+## F-2. 알람 → Agent 채팅 (적용 1단계)
+
+설계는 [01 §2.4](01_architecture.md)에 있다.
+
+Agent
+- [ ] 장애 유형별 1차 Agent 목록 (예: 앱 응답 지연, 리소스 과다, 배치 실패)
+- [ ] 전문 Agent 목록 (예: DB, 네트워크, 미들웨어)과 전환 가능 관계
+- [ ] 라우팅 표: `rule_id` / 서비스 → 1차 Agent
+- [ ] Agent 형태: Agent v2([06](06_dify_agent_configuration.md)) / Chatflow. 각 Agent의 Service API Key 발급
+- [ ] 인계 요약 형식 (전문 Agent로 넘길 때 무엇을 담을지)
+
+오케스트레이터 API (Agent 도구로 등록)
+- [ ] `get_incident(incident_id)`: 장애 정보 조회
+- [ ] `request_action(incident_id, action_id, params, reason)`: 승인 대기 요청 생성. **실행하지 않음**
+- [ ] `get_action_status(request_id)`: 조치 상태와 결과
+- [ ] 위 API의 OpenAPI 스키마와 Agent 전용 인증 키 (조치 실행 권한 없음)
+
+포탈 채팅 화면
+- [ ] 채팅 링크 대상 결정: 포탈 채팅 화면(권장) / Dify Web App 직접(PoC 한정)
+- [ ] SSO 적용, 장애 채팅 열람 권한 (장애 관계자만)
+- [ ] `incident_id ↔ conversation_id` 저장, Service API `user` 규칙 (`incident-<incident_id>`)
+- [ ] 스트리밍 응답(SSE) 표시, 대화 이력, 승인 카드, 전문 Agent 전환 버튼
+- [ ] 발화자(SSO 사용자) 기록, 감사 로그
+- [ ] Dify 장애 시 화면: 장애 정보와 "수동 대응" 안내만 표시
+
+메신저 알람
+- [ ] 알람 메시지 형식: 요약 한두 줄 + 채팅 링크 (상세 정보는 링크 안에서만)
+- [ ] 알람 대상: 개인 / 장애 채팅방. 조치 결과를 같은 곳에 다시 보낼지
+- [ ] 초기 분석을 알람과 동시에 돌릴지, 첫 질문 때 돌릴지
+
 ## G. 테스트 · 평가 데이터
 
 - [ ] 과거 실제 장애 이벤트 샘플 (입력 payload + 그때 실제 원인 + 실제 조치) 최소 10건
@@ -150,6 +188,7 @@ Dify에 실제로 넣어야 하는 값들이다. 이 값들이 모두 준비되�
 - [ ] Dify 백업: **PostgreSQL과 파일 저장소를 함께** 백업 (자격증명 복호화용 개인키가 파일 저장소에 있음, [05 §3.2](05_dify_db_schema.md))
 - [ ] Dify DB와 백업 파일 접근 권한 관리 (앱 API Key가 평문으로 저장됨, [05 §3.3](05_dify_db_schema.md)). 호출 주체별로 키를 분리하고 주기적으로 교체
 - [ ] 실행 로그(`workflow_runs`, `workflow_node_executions`) 보관 기간과 정리 정책
+- [ ] Agent Secret 환경 변수가 DB(`agent_config_snapshots.config_snapshot`)에 평문으로 남는지 설치본에서 확인 ([05 §3.6](05_dify_db_schema.md))
 - [ ] 모니터링 대상: Dify 자체 응답 시간, 실패율, 토큰 사용량
 
 ---
@@ -161,13 +200,23 @@ Dify에 실제로 넣어야 하는 값들이다. 이 값들이 모두 준비되�
   - (나) 오케스트레이터 DB: Dify는 분석 결과를 출력하고 끝난다. 오케스트레이터가 메신저 카드 발송, 콜백, 만료, 감사 로그를 한곳에서 처리한다. 엔진과 독립적이다.
   - 어느 쪽이든 실제 조치 실행은 오케스트레이터가 화이트리스트로 검증한 뒤에 함
 
+- [ ] **채팅 링크 대상** (권장: 포탈 채팅 화면)
+  - (W) Dify Web App 직접: 개발이 없지만 Self-hosted Web App은 URL만 알면 누구나 접속 가능(접근 제어는 Enterprise). 사용자 식별·승인·감사 불가
+  - (P) 포탈 채팅 화면: SSO, 장애 정보·대화·승인 카드를 한 화면에. 채팅 화면 개발 필요
+
+- [x] **LLM·MCP를 LiteLLM 경유로 붙일지** → **이번 범위에서 제외** (2026-10-22). LLM과 MCP는 Dify에 직접 연결한다. 아래는 나중에 검토할 때를 위한 참고
+  - 겹치는 부분: 모델 공급자 키 관리, 사용량 기록은 Dify에도 있다
+  - LiteLLM이 더하는 것: Dify 밖의 사용처(포탈, 다른 도구)까지 한곳에서 키·예산·사용량 관리, 모델 간 대체(fallback), 내부 모델과 외부 API 전환, 외부 반출 전 마스킹(guardrail), stdio MCP의 HTTP 변환
+  - 비용: 설정 위치가 둘이 되고, 거치는 곳이 하나 늘어 장애점이 됨. Dify에서는 "OpenAI 호환" 공급자로 등록하므로 모델 기능(Function calling, Vision, Structured output, 컨텍스트 길이)을 직접 맞게 선언해야 함
+  - 판단 기준: LLM을 Dify 하나만 쓰고 공급자도 하나면 직접 연결, 여러 곳에서 쓰거나 조직 단위 통제가 필요하면 LiteLLM
+
 ## 결정 로그
 
 | 날짜 | 결정 | 근거 |
 |---|---|---|
 | 2026-10-21 | 정량 임계치 판정은 규칙 엔진(코드)에서 하고 LLM은 이벤트 발생 시에만 호출 | 정확성과 비용 |
 | 2026-10-21 | LLM은 조치 ID만 출력하고 자유 형식 명령은 금지 | 안전성 |
-| 2026-10-21 | 1차 범위는 Dify Workflow, 대화형 Agent는 2차 | 입력·출력이 고정된 단발 분석이 먼저 필요 |
+| 2026-10-21 | ~~1차 범위는 Dify Workflow, 대화형 Agent는 2차~~ (아래 결정으로 변경) | 입력·출력이 고정된 단발 분석이 먼저 필요 |
 | 2026-10-21 | Dify는 Self-hosted 전제. 권장 구성은 Dify 엔진 + Service API 기반 운영 포탈 (방안 C, 최종 결정 전) | 엔진 기능은 그대로 쓰고 운영 화면만 직접 만들 수 있음 |
 | 2026-10-21 | 기존 로그·메트릭 조회 API와 메일 발송 시스템은 재사용 | 이미 구축되어 있음 |
 | 2026-10-21 | 포탈은 Dify 콘솔 내부 API를 쓰지 않음. 에이전트 등록·수정은 Dify 콘솔에서 | 콘솔 API는 공식 계약이 아니어서 업그레이드 시 깨질 수 있음 |
@@ -175,3 +224,6 @@ Dify에 실제로 넣어야 하는 값들이다. 이 값들이 모두 준비되�
 | 2026-10-21 | 메신저에 버튼·콜백이 없으므로 유효기간 UUID 토큰 링크 → 포탈 승인 페이지(SSO)에서 승인. 링크를 여는 것만으로는 상태가 바뀌지 않고, 결정은 POST로만 함 | 메신저 기능 제약. 링크가 유출되거나 미리보기로 열려도 안전하게 하기 위함 |
 | 2026-10-21 | 승인 상태는 오케스트레이터 DB에서 관리 (Dify Human Input 미사용, 1차) | 메신저 연동을 직접 만들어야 하므로 상태를 한곳에 둠 |
 | 2026-10-21 | 에이전트 정의의 원본은 Git의 DSL. 운영 반영은 `difyctl import studio-app` 사용. 콘솔 내부 API와 Dify DB를 직접 쓰는 연동은 만들지 않음 | 공식 등록 API가 없음 (issue #27795 not planned). difyctl은 공식 CLI |
+| 2026-10-21 | 적용 1단계: 메신저 알람 → 해당 Agent 채팅으로 이동 → 채팅으로 상황 파악 → 해당 Agent 또는 연결된 전문 Agent 채팅으로 해결. Workflow 분석은 초기 분석(선택)으로 사용 | 사용자 결정 |
+| 2026-10-21 | 채팅에서 해결하더라도 Agent는 `request_action`으로 요청만 하고, 실행은 SSO 사용자의 승인(POST) 뒤 오케스트레이터가 함 | 설계 원칙 유지 (LLM 출력만으로 실행 금지) |
+| 2026-10-22 | LiteLLM(LLM·MCP 게이트웨이)은 이번 범위에서 제외. LLM과 MCP는 Dify에 직접 연결. 방법과 판단 기준만 참고로 기록 | 범위 축소 (사용자 결정) |

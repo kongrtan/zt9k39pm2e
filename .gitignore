@@ -3,3 +3,6 @@
 *.swp
 Thumbs.db
 .DS_Store
+
+# 실제 서버 주소가 들어간 로컬 설정과 그 결과물 (공개 저장소에 올리지 않음)
+tools/local/

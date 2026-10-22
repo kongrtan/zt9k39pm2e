@@ -216,6 +216,52 @@ erDiagram
 - **플러그인 설치 정보**는 `plugin_daemon`이 별도의 DB에 저장한다 (Docker Compose 기본 설정에서는 같은 PostgreSQL 서버의 별도 데이터베이스. 설치본의 `.env`에서 확인).
 - **벡터**는 Vector DB에, **원본 파일과 개인키**는 파일 저장소에 있다.
 
+### 3.6 Agent(v2) 설정은 JSON 한 덩어리로 저장된다
+
+[06](06_dify_agent_configuration.md)의 Agent 설정(모델, 프롬프트, 스킬, 파일, 도구, 지식 검색, 환경 변수)은 항목별 테이블이 아니다. **`AgentSoulConfig` JSON 하나**로 저장된다.
+
+| 테이블 | 저장 내용 |
+|---|---|
+| `agents` | Agent 기본 정보(이름, 역할, 아이콘), 현재 게시본 `active_config_snapshot_id` |
+| `agent_config_drafts` | 편집 중인 초안. `config_snapshot` 컬럼(TEXT)에 설정 JSON 전체 |
+| `agent_config_snapshots` | 게시할 때마다 `version`을 1씩 올린 **스냅샷 행을 새로 추가**. `config_snapshot`에 설정 JSON 전체 |
+| `agent_config_revisions` | 이전 스냅샷 → 현재 스냅샷 변경 이력 |
+| `workflow_agent_node_bindings` | 어느 Workflow의 어느 노드가 어떤 Agent(스냅샷)를 쓰는지 |
+| `skills`, `skill_versions`, `skill_draft_files` | 워크스페이스 스킬 라이브러리 (스킬 자체의 원본과 버전) |
+| `agent_skill_bindings`, `agent_skill_binding_snapshots` | Agent ↔ 라이브러리 스킬 연결 (초안 / 게시본별) |
+
+**설정 JSON 안에서 각 항목을 가리키는 방식**
+
+| 항목 | JSON 안의 참조 값 | 가리키는 대상 |
+|---|---|---|
+| 모델 | `plugin_id`, `model_provider`, `model` (**이름 문자열**). 자격 증명은 `credential_ref.id` (UUID) | 모델 공급자 설정 / 자격 증명 테이블 |
+| 도구 | `provider_type` + `plugin_id`·`provider`(또는 `provider_id`) + `tool_name` (**문자열**). 자격 증명은 `credential_ref.id` (UUID) | 플러그인, 자체 API Tool, MCP, Workflow Tool |
+| 지식 검색 | `datasets[].id` (UUID) | `datasets` |
+| 파일 | `config_files[].file_id` (UUID) + `file_kind`(`upload_file` / `tool_file`) | `upload_files` / `tool_files` (실제 내용은 파일 저장소) |
+| 업로드한 스킬 (EMBEDDED) | `config_skills[].file_id` (UUID, zip 파일) | `tool_files` |
+| 라이브러리 스킬 | JSON이 아니라 **`agent_skill_bindings.skill_id` 컬럼** (UUID) | `skills` |
+| 환경 변수 | `env.variables[]`(Plain), `env.secret_refs[]`(Secret)에 **이름과 값이 JSON 안에** | (참조 없음) |
+| CLI 도구 | `tools.cli_tools[]`에 설치 명령, 도구별 환경 변수까지 JSON 안에 | (참조 없음) |
+| 프롬프트 안 참조 | `[§tool:<provider>/<tool>§]`, `[§file:<이름>§]` 같은 **토큰 문자열** | 같은 JSON 안의 도구·파일 항목 |
+
+**스킬 추가 방법별 저장 차이** (`services/agent/config_skill_normalize_service.py`, `core/tools/tool_file_manager.py`)
+
+| | Upload package (EMBEDDED) | From skill library |
+|---|---|---|
+| 업로드 시 하는 일 | zip 검증·정규화 → **`tool_files`에 행 1개 추가** (이때 `id`를 UUID v4로 새로 만듦) → 파일 저장소 `tools/<tenant_id>/<랜덤 hex>.zip`에 저장 | 업로드 없음. 이미 있는 스킬을 연결 |
+| Agent가 가리키는 값 | 설정 JSON의 `config_skills[].file_id` = `tool_files.id` | `agent_skill_bindings.skill_id` = `skills.id` (UUID v7) |
+| 이름 | `SKILL.md`의 `name` (Agent 안에서 유일) | `skills.name` (워크스페이스 안에서 유일) |
+| `skills` 테이블 등록 | **안 됨.** 라이브러리에 보이지 않는다 | 라이브러리에서 만들고 게시한 스킬 (`skill_versions`에 버전별 스냅샷) |
+| 같은 zip을 다시 올리면 | 새 `tool_files` 행과 **새 UUID**가 생긴다 | 해당 없음 |
+| 다른 Agent에서 재사용 | 각 Agent에 따로 올림 (UUID가 각각 다름) | 같은 `skill_id`를 연결 |
+
+**정리**
+- ID는 **UUID**를 쓴다. 순번(seq)은 쓰지 않는다. 새 테이블 일부는 시간순 정렬이 되는 UUID v7을 쓴다. 순번은 스냅샷 `version`, 리비전 `revision` 같은 버전 번호에만 쓴다.
+- **DB 외래키(FK) 제약은 거의 없다.** 1.17.1 `models/` 전체에서 `ForeignKey`는 9곳(댓글, 대화 등)뿐이고, Agent·스킬 테이블에는 하나도 없다. 무결성은 애플리케이션 코드가 검사한다.
+- 그래서 참조 대상이 지워져도 DB가 막지 않는다. 대신 JSON에 `is_missing` 표시가 남고, 화면에 "File not found", "Skill not found"로 나온다.
+- 모델과 도구는 UUID가 아니라 **이름 문자열**로 참조한다. 그래서 DSL로 다른 Dify에 옮겨도 같은 이름의 플러그인과 모델이 설치되어 있으면 그대로 연결된다. 반대로 파일과 스킬 zip은 설치본마다 UUID가 달라서, 옮기면 `is_missing`이 되어 다시 올려야 한다.
+- **환경 변수 값은 설정 JSON 안에 들어 있다.** 화면에는 Secret 값을 "암호화되어 저장된다"고 안내한다. 하지만 이번에 확인한 소스 범위(`models/`, `services/agent/`)에서는 암호화 코드를 찾지 못했다. 설치본 DB에서 `agent_config_snapshots.config_snapshot`의 `secret_refs` 값이 평문인지 직접 확인한다 ([02 H](02_dify_agent_prerequisites.md)).
+
 ---
 
 ## 4. 설치본에서 실제 스키마 확인하기
@@ -245,3 +291,4 @@ docker compose exec db_postgres psql -U postgres -d dify -c 'select * from alemb
 | 날짜 | 내용 |
 |---|---|
 | 2026-10-21 | 초안 작성. 1.17.1 소스 기준 등록 관련 테이블, ERD, 암호화·API Key 저장 방식 |
+| 2026-10-21 | §3.6 Agent(v2) 설정 저장 방식 추가 (JSON 스냅샷, UUID 참조, FK 없음) |

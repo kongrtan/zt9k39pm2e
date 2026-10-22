@@ -1,0 +1,92 @@
+# Grafana 전체 스펙(200개 넘는 경로)에서 장애 조사에 쓰는 조회만 남긴다.
+#   python tools/openapi_slim.py tools/grafana-incident.slim.yaml
+# 결과(dist/grafana-incident.yaml)를 Dify → Tools → Custom → 스키마에 붙여 넣는다.
+# 인증: Grafana 서비스 계정 토큰(Viewer), 헤더 Authorization, 접두어 Bearer
+#
+# 구성은 Grafana MCP 서버로 실제 조사할 때 많이 쓴 도구와 같은 일을 하도록 맞췄다.
+#   search_dashboards             → GET /search
+#   get_dashboard_summary/
+#   get_dashboard_panel_queries   → GET /dashboards/uid/{uid}  (응답에서 패널과 쿼리를 읽음)
+#   list_datasources              → GET /datasources
+#   query_prometheus              → GET /datasources/proxy/uid/{uid}/api/v1/query, query_range
+#   list_prometheus_metric_names  → GET /datasources/proxy/uid/{uid}/api/v1/label/__name__/values
+
+source: https://raw.githubusercontent.com/grafana/grafana/main/public/openapi3.json
+# 설치한 Grafana 버전의 스펙을 쓰려면: https://raw.githubusercontent.com/grafana/grafana/v<버전>/public/openapi3.json
+server: https://grafana.internal/api
+output: dist/grafana-incident.yaml
+title: grafana-incident
+version: "0.2"
+drop_responses: true
+
+operations:
+  - path: /search
+    method: get
+    operation_id: search_dashboards
+    summary: 대시보드 검색. 대시보드 uid를 찾거나, 답변에 운영자가 열어 볼 대시보드 링크를 붙일 때 사용
+    description: query에 대시보드 이름이나 서비스 이름을 넣는다. 결과의 uid는 get_dashboard에, url은 Grafana 주소를 앞에 붙여 링크로 쓴다.
+    keep_params: [query, tag, type, limit]
+
+  - path: /dashboards/uid/{uid}
+    method: get
+    operation_id: get_dashboard
+    summary: 대시보드 하나의 구성과 패널 쿼리 조회. 대시보드가 무엇을 보여주는지, 어떤 PromQL을 쓰는지 확인할 때 사용
+    description: >-
+      uid는 search_dashboards 결과의 uid. 응답의 dashboard.title, dashboard.panels[].title, type, datasource,
+      targets[].expr(PromQL)를 읽는다. 행(row) 패널 안의 panels[]도 확인한다. 지표 값은 오지 않으므로,
+      값이 필요하면 targets[].expr를 query_prometheus나 query_prometheus_range로 실행한다.
+      쿼리 안의 $변수(예 $instance, $__rate_interval)는 실제 값으로 바꿔서 실행한다.
+
+  - path: /datasources
+    method: get
+    operation_id: list_datasources
+    summary: 데이터 소스 목록 (이름, 종류, uid). Prometheus 데이터 소스의 uid를 찾을 때 사용
+    description: type이 prometheus인 항목의 uid를 query_prometheus의 uid로 쓴다.
+
+# Prometheus 조회는 Grafana 데이터 소스 프록시를 통한다. 공식 스펙의 범용 경로({datasource_proxy_route})는
+# 경로 안의 "/"가 인코딩되어 깨지므로 구체 경로를 직접 적는다.
+extra_paths:
+  /datasources/proxy/uid/{uid}/api/v1/query:
+    get:
+      operationId: query_prometheus
+      summary: PromQL 즉시 조회 (한 시점의 값). 지금 디스크 여유, 현재 CPU처럼 현재 값을 볼 때 사용
+      description: >-
+        uid는 Prometheus 데이터 소스 uid. time은 RFC3339(예 2026-10-22T10:00:00+09:00) 또는 Unix 초이며,
+        비우면 현재. 결과가 많아지지 않게 instance, job 같은 라벨로 거르고 topk()를 쓴다.
+      parameters:
+        - { name: uid, in: path, required: true, schema: { type: string }, description: Prometheus 데이터 소스 uid }
+        - { name: query, in: query, required: true, schema: { type: string }, description: "PromQL. 예: node_filesystem_avail_bytes{mountpoint=\"/\"}" }
+        - { name: time, in: query, schema: { type: string }, description: 조회 시점. 비우면 현재 }
+      responses:
+        "200": { description: OK }
+
+  /datasources/proxy/uid/{uid}/api/v1/query_range:
+    get:
+      operationId: query_prometheus_range
+      summary: PromQL 구간 조회 (시간별 추이). 장애 전후 변화, 요일·시간대 패턴(예 매주 월요일 느려짐)을 볼 때 사용
+      description: >-
+        start, end는 RFC3339 또는 Unix 초. 상대 시간(now-1h)은 안 되므로 current_time으로 지금 시각을 먼저 확인한다.
+        step은 구간 길이에 맞춘다: 1시간 → 60s, 1일 → 5m, 7일 → 1h. 결과 점 개수를 수백 개 이내로 유지한다.
+      parameters:
+        - { name: uid, in: path, required: true, schema: { type: string }, description: Prometheus 데이터 소스 uid }
+        - { name: query, in: query, required: true, schema: { type: string }, description: "PromQL. 예: rate(node_vmstat_pgmajfault[5m])" }
+        - { name: start, in: query, required: true, schema: { type: string } }
+        - { name: end, in: query, required: true, schema: { type: string } }
+        - { name: step, in: query, required: true, schema: { type: string }, description: "예: 60s, 5m, 1h" }
+      responses:
+        "200": { description: OK }
+
+  /datasources/proxy/uid/{uid}/api/v1/label/__name__/values:
+    get:
+      operationId: list_prometheus_metric_names
+      summary: Prometheus에 있는 지표 이름 목록. 어떤 지표로 조회할지 모를 때 사용 (예 node_pressure_io 계열이 있는지 확인)
+      description: 목록이 매우 길 수 있으므로 match[]로 범위를 좁힌다. 예 match[]={job="node-exporter"}
+      parameters:
+        - { name: uid, in: path, required: true, schema: { type: string }, description: Prometheus 데이터 소스 uid }
+        - { name: "match[]", in: query, schema: { type: string }, description: "시리즈 선택자. 예: {job=\"node-exporter\"}" }
+      responses:
+        "200": { description: OK }
+
+# 필요하면 추가 (장애 채팅 시나리오용)
+#  - path: /annotations          (배포·점검 주석)        operation_id: get_annotations
+#  - extra: /prometheus/grafana/api/v1/alerts (지금 울리는 Grafana 알림)

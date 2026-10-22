@@ -1,0 +1,46 @@
+# 규칙 엔진의 알람 규칙 설명 (Agent 참고용)
+# 실제 판정은 규칙 엔진이 한다. Agent는 "이 알람이 무슨 뜻인지" 설명할 때만 쓴다.
+rules:
+  - rule_id: CPU_HIGH_1M
+    meaning: CPU 사용률이 임계치를 1분 이상 연속으로 넘음
+    metric: cpu_usage
+    unit: "%"
+    threshold: 90
+    duration: 1m
+    severity_default: WARNING
+    escalate_to_critical: 15분 이상 지속되거나 5xx 응답이 함께 늘 때
+    first_checks:
+      - 감지 직전 2시간 안의 배포
+      - GC 로그, 스레드 수
+      - 같은 시각 트래픽(TPS) 증가 여부
+  - rule_id: MEM_HIGH_5M
+    meaning: 메모리 사용률이 임계치를 5분 이상 넘음
+    metric: mem_usage
+    unit: "%"
+    threshold: 85
+    duration: 5m
+    severity_default: WARNING
+    escalate_to_critical: 상승 추세가 계속되고 OOM 로그가 나올 때
+    first_checks:
+      - 메모리 상승 추세 (summarize_metrics.py의 trend)
+      - OOM, OutOfMemoryError 로그
+  - rule_id: HTTP_5XX_RATE
+    meaning: 전체 응답 중 5xx 비율이 임계치를 넘음
+    metric: http_5xx_ratio
+    unit: "%"
+    threshold: 2
+    duration: 3m
+    severity_default: CRITICAL
+    first_checks:
+      - 의존 서비스(service-catalog.csv의 depends_on) 상태
+      - 오류 메시지별 건수
+  - rule_id: BATCH_DELAY
+    meaning: 배치 작업이 예정 종료 시각보다 30분 이상 늦음
+    metric: batch_elapsed_minutes
+    unit: min
+    threshold: 30
+    duration: 0m
+    severity_default: WARNING
+    first_checks:
+      - DB 락 대기, 슬로 쿼리
+      - 입력 데이터 건수 급증 여부

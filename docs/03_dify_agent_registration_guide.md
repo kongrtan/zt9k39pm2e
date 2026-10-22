@@ -332,6 +332,8 @@ difyctl import studio-app --from-file dify/apps/monitoring-incident-analyzer.yml
 4. 조치 실행 Tool은 연결하지 않는다. 조회 Tool만 연결한다.
 5. 포탈에서 `POST /v1/chat-messages`로 호출하고 `conversation_id`로 대화를 이어간다.
 
+> Dify 1.17 이상에서는 Workflow에서 재사용 Agent(Agent v2)를 노드로 불러 쓰는 방식도 있다. 설정 항목은 [06 Dify Agent 설정 항목](06_dify_agent_configuration.md)을 본다.
+
 ---
 
 ## 참고 자료
