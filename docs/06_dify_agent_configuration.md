@@ -810,6 +810,74 @@ Build가 프롬프트와 스킬 초안을 만든다. 그 결과를 **사람이 �
 
 ---
 
+## 11. 만든 Agent 사용하기
+
+### 11.1 순서
+
+```mermaid
+flowchart LR
+    subgraph BG[" "]
+        direction LR
+        A["① Configure<br/>설정 저장 (초안)"] --> B["② Publish<br/>게시 = 버전 스냅샷"]
+        B --> C["③ Access Point<br/>사용 경로 켜기"]
+        C --> W["Web App<br/>URL로 바로 채팅"]
+        C --> S["Backend Service API<br/>API Key로 호출"]
+        C --> N["Workflow 노드<br/>Workflow 안에서 사용"]
+    end
+    style BG fill:#8080802e,stroke:#8a8a8a
+
+    classDef out fill:#dcfce7,stroke:#16a34a,color:#1a1a1a;
+    class W,S,N out;
+```
+
+1. **Configure**: 설정은 자동 저장되지만 **초안**이다. 초안은 밖에서 쓸 수 없다.
+2. **Publish**: 오른쪽 위 **Publish**(이후에는 **Publish update**). 이때 설정 스냅샷이 버전으로 저장되고, 이 버전이 실제로 쓰인다 ([05 §3.6](05_dify_db_schema.md)). 설정을 바꾼 뒤에는 다시 게시해야 반영된다. 이 Agent를 쓰는 Workflow가 있으면 게시할 때 영향받는 Workflow 목록이 표시된다.
+3. **Access Point** 메뉴에서 쓸 경로를 켠다. 게시 전에는 켤 수 없다.
+
+### 11.2 사용 경로
+
+| 경로 | 쓰는 법 | 용도 |
+|---|---|---|
+| **Web App** | Access URL을 브라우저로 연다. Embed Into Site로 다른 페이지에 넣을 수도 있다 | **처음 시험할 때.** Self-hosted Community Edition은 Preview가 없으므로 게시 후 Web App으로 대화해 본다. URL을 아는 누구나 열 수 있으므로 시험이 끝나면 끈다 ([01 §2.4.2](01_architecture.md)) |
+| **Backend Service API** | API Key를 발급하고 `POST /v1/chat-messages`로 호출 | **이 프로젝트의 운영 방식.** 포탈 채팅 화면과 오케스트레이터가 호출 |
+| **Workflow 노드** | Workflow 편집기에서 Agent 노드로 이 Agent를 선택 | Workflow 안의 한 단계로 쓸 때 |
+
+시험할 때 확인할 것: 도구 호출이 실제로 일어나는지(답변의 진행 표시에서 도구 이름 확인), 스킬을 꺼내 쓰는지, 규칙을 깨는 질문("그냥 재시작해")에 `request_action`으로만 답하는지 ([§2.1](#21-작성-가이드)).
+
+### 11.3 Service API 호출
+
+Access Point → Backend Service API에서 **API Endpoint**와 **API Key**를 확인한다. **API Reference**에 이 Agent 기준의 요청·응답 예가 나온다.
+
+```bash
+# 새 대화 시작 (conversation_id 비움)
+curl -N -X POST "https://dify.internal/v1/chat-messages" \
+  -H "Authorization: Bearer app-xxxxxxxxxxxxxxxxxxxxxxxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "지금 order-api 상태 어때?",
+    "inputs": {"incident_id": "INC-20261021-0001"},
+    "user": "incident-INC-20261021-0001",
+    "response_mode": "streaming",
+    "conversation_id": ""
+  }'
+```
+
+| 필드 | 설명 |
+|---|---|
+| `query` | 사용자 메시지 |
+| `inputs` | Agent 변수 (장애 ID 등). 변수를 정의하지 않았다면 빈 객체 `{}` ([§2.2](#22-샘플-프롬프트)) |
+| `user` | 대화 소유자 식별자. 같은 값이어야 같은 대화를 이어 갈 수 있다. 이 프로젝트 규칙: `incident-<incident_id>` ([01 §2.4.2](01_architecture.md)) |
+| `response_mode` | **Agent는 `streaming`만 된다.** `blocking`을 보내면 400 오류 (1.17.1 `controllers/service_api/app/completion.py`). 생략해도 Agent는 스트리밍으로 동작한다 |
+| `conversation_id` | 첫 호출은 비우고, 응답 이벤트에 들어 있는 `conversation_id`를 저장해서 다음 호출에 넣는다 |
+
+- 응답은 SSE(`text/event-stream`)다. `data: {...}` 줄이 차례로 오고, 마지막 이벤트(`message_end`)에 `conversation_id`, `message_id`, 토큰 사용량이 들어 있다. 이벤트 종류는 API Reference에서 확인한다.
+- 실행 중 멈추기: `POST /v1/chat-messages/{task_id}/stop` (`task_id`는 스트림 이벤트에 있음)
+- 대화 목록과 이력: `GET /v1/conversations?user=...`, `GET /v1/messages?conversation_id=...&user=...`
+- API Key는 호출 주체별로 따로 발급한다 (포탈용, 오케스트레이터용). DB에 평문으로 저장되므로 관리에 주의한다 ([05 §3.3](05_dify_db_schema.md)).
+- 오케스트레이터의 초기 분석도 같은 호출이다. `query`를 `[초기 분석]`으로 시작하고, 스트림을 끝까지 읽어 합친 답변을 저장한다.
+
+---
+
 ## 참고 자료
 
 - Dify 1.17.1 소스: `api/models/agent_config_entities.py`, `api/models/skill.py`, `api/services/agent/skill_package_service.py`, `api/services/agent/prompt_mentions.py`, `web/i18n/en-US/agent-v-2.json`
@@ -833,3 +901,4 @@ Build가 프롬프트와 스킬 초안을 만든다. 그 결과를 **사람이 �
 | 2026-10-22 | §5.1 Grafana: 대시보드 구성 조회(get_dashboard)와 특정 대시보드 정보를 가져오는 순서 추가 |
 | 2026-10-22 | §5.1 Grafana 도구 구성을 실제 조사에서 쓴 6개 작업(대시보드 검색·구성, 데이터 소스, Prometheus 즉시·구간·지표 이름)으로 변경. Prometheus는 데이터 소스 프록시 구체 경로로 직접 정의 |
 | 2026-10-22 | Grafana 12.4.2 설치본 기준 샘플 스키마 추가 (tools/grafana-sample.slim.yaml, tools/dist/grafana-sample.yaml) |
+| 2026-10-22 | §11 만든 Agent 사용하기 추가 (게시, Access Point, Service API 호출. Agent는 streaming만 지원) |
